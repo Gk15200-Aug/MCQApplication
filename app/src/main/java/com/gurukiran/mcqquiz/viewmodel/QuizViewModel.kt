@@ -1,6 +1,14 @@
 package com.gurukiran.mcqquiz.viewmodel
 
+import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Application
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.util.Log
+import androidx.annotation.RequiresPermission
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.gurukiran.mcqquiz.data.model.Question
@@ -54,6 +62,11 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
 
     private val LONGEST_KEY = intPreferencesKey("longest_streak")
 
+    private val _isOffline = MutableStateFlow(false)
+    val isOffline: StateFlow<Boolean> = _isOffline
+
+    private var wasOfflineLoad = false
+
     init {
         loadLongestStreak()
         loadQuestions()
@@ -72,16 +85,54 @@ class QuizViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    @SuppressLint("MissingPermission")
+    fun observeInternet(context: Context) {
+        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                _isOffline.value = false
+                if (wasOfflineLoad) loadQuestions() // auto refresh when online
+            }
+
+            override fun onLost(network: Network) {
+                _isOffline.value = true
+            }
+        }
+
+        connectivityManager.registerDefaultNetworkCallback(callback)
+    }
+
+    @RequiresPermission(Manifest.permission.ACCESS_NETWORK_STATE)
+    @SuppressLint("ServiceCast")
+    private fun isInternetAvailable(context: Context): Boolean {
+        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val network = connectivityManager.activeNetwork ?: return false
+        val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+    }
+
+
     fun loadQuestions() {
         viewModelScope.launch {
             _loading.value = true
-            _error.value = null
             val res = repo.getQuestions()
-            if (res.isSuccess) {
-                _questions.value = res.getOrNull() ?: emptyList()
-            } else {
-                _error.value = res.exceptionOrNull()?.message ?: "Failed to load questions"
+            res.onSuccess { quizResult ->
+                _questions.value = quizResult.questions
+                _isOffline.value = false
+                wasOfflineLoad = false
+            }.onFailure {
+                val fallback = repo.loadFromAssetsFallback()
+                if (fallback.isNotEmpty()) {
+                    _questions.value = fallback
+                    _isOffline.value = true
+                    wasOfflineLoad = true
+                } else {
+                    _error.value = "No Internet & No cached questions!"
+                }
             }
+
             _loading.value = false
         }
     }

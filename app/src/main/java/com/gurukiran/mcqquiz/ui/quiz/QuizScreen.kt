@@ -16,7 +16,9 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.airbnb.lottie.compose.*
 import com.gurukiran.mcqquiz.R
@@ -34,8 +36,14 @@ fun QuizScreen(onFinish: () -> Unit) {
     val selected by vm.selectedAnswer.collectAsState()
     val showAnswer by vm.showAnswer.collectAsState()
     val streak by vm.streak.collectAsState()
+    val isOffline by vm.isOffline.collectAsState()
+    val context = LocalContext.current
 
-    Box(
+    LaunchedEffect(Unit) {
+        vm.observeInternet(context)
+    }
+
+    Column(
         modifier = Modifier
             .fillMaxSize()
             .background(
@@ -43,50 +51,86 @@ fun QuizScreen(onFinish: () -> Unit) {
                     listOf(Color(0xFF0A0F1F), Color(0xFF1A2738), Color(0xFF0A0F1F))
                 )
             )
-            .drawBehind {
-                drawCircle(
-                    color = Color(0xFF6A85FF).copy(alpha = 0.05f),
-                    radius = size.maxDimension / 1.3f,
-                    center = center
+    ) {
+        AnimatedVisibility(
+            visible = isOffline,
+            enter = slideInVertically() + fadeIn(),
+            exit = slideOutVertically() + fadeOut()
+        ) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(WindowInsets.statusBars.asPaddingValues()),
+                color = Color(0xFFFF9800),
+                shadowElevation = 6.dp
+            ) {
+                Text(
+                    text = "⚠ You're offline — Showing cached questions",
+                    modifier = Modifier.padding(10.dp),
+                    textAlign = TextAlign.Center,
+                    color = Color.Black,
+                    fontWeight = FontWeight.Black
                 )
             }
-            .padding(WindowInsets.systemBars.asPaddingValues())
-            .padding(20.dp)
-    ) {
-        AnimatedContent(
-            targetState = loading to error to questions.isEmpty() to (index >= questions.size),
-            transitionSpec = { fadeIn(tween(400)) togetherWith fadeOut(tween(400)) }
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(Color(0xFF0A0F1F), Color(0xFF1A2738), Color(0xFF0A0F1F))
+                    )
+                )
+                .drawBehind {
+                    drawCircle(
+                        color = Color(0xFF6A85FF).copy(alpha = 0.05f),
+                        radius = size.maxDimension / 1.3f,
+                        center = center
+                    )
+                }
+                .padding(WindowInsets.systemBars.asPaddingValues())
+                .padding(20.dp)
         ) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
+            AnimatedContent(
+                targetState = loading to error to questions.isEmpty() to (index >= questions.size),
+                transitionSpec = { fadeIn(tween(400)) togetherWith fadeOut(tween(400)) }
             ) {
-                when {
-                    loading -> Column(
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        CircularProgressIndicator(
-                            color = Color(0xFFFFC107),
-                            strokeWidth = 3.dp,
-                            modifier = Modifier.size(42.dp)
-                        )
-                        Spacer(Modifier.height(14.dp))
-                        Text("Getting your quiz ready...", color = Color.White.copy(0.8f))
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    when {
+                        loading -> Column(
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            CircularProgressIndicator(
+                                color = Color(0xFFFFC107),
+                                strokeWidth = 3.dp,
+                                modifier = Modifier.size(42.dp)
+                            )
+                            Spacer(Modifier.height(14.dp))
+                            Text("Getting your quiz ready...", color = Color.White.copy(0.8f))
+                        }
+
+                        error != null -> ErrorRetry(error!!, vm)
+
+                        questions.isEmpty() -> Column(
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                "⚠ No Questions Found",
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text("Please try again later", color = Color.Gray)
+                        }
+
+                        index >= questions.size -> LaunchedEffect(Unit) { onFinish() }
+
+                        else -> QuizContent(vm, index, showAnswer, selected, streak)
                     }
-
-                    error != null -> ErrorRetry(error!!, vm)
-
-                    questions.isEmpty() -> Column(
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text("⚠ No Questions Found", fontWeight = FontWeight.Bold, color = Color.White)
-                        Spacer(Modifier.height(8.dp))
-                        Text("Please try again later", color = Color.Gray)
-                    }
-
-                    index >= questions.size -> LaunchedEffect(Unit) { onFinish() }
-
-                    else -> QuizContent(vm, index, showAnswer, selected, streak)
                 }
             }
         }

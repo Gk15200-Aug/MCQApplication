@@ -78,4 +78,5 @@ dependencies {
     implementation(libs.accompanist.pager.indicators)
     implementation(libs.lottie.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.gson)
 }
