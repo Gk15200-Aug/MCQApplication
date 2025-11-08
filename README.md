@@ -89,7 +89,7 @@ https://gist.githubusercontent.com/dr-samrat/53846277a8fcb034e482906ccc0d12b2/ra
 1. Clone the project
 
    ```sh
-   git clone <your-repo-url>
+   git clone https://github.com/Gk15200-Aug/MCQApplication.git
    ```
 2. Open in **Android Studio**
 3. Sync Gradle & Run on device/emulator (API 24+)
